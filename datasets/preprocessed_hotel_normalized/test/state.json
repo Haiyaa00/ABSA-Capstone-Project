@@ -4,10 +4,10 @@
       "filename": "data-00000-of-00001.arrow"
     }
   ],
-  "_fingerprint": "b3c57f185908b71f",
+  "_fingerprint": "252d086128376136",
   "_format_columns": null,
   "_format_kwargs": {},
   "_format_type": null,
   "_output_all_columns": false,
-  "_split": "train"
+  "_split": "test"
 }

@@ -7,7 +7,7 @@ import regex as re
 
 from io import StringIO
 from vncorenlp import VnCoreNLP
-from transformers import pipeline
+# from transformers import pipeline
 
 
 class VietnameseTextCleaner: # https://ihateregex.io
@@ -69,10 +69,6 @@ class VietnameseToneNormalizer:
         ['y', 'ỳ', 'ý', 'ỷ', 'ỹ', 'ỵ', 'y']
     ]
     
-    # VOWELS_TO_IDS = {}
-    # for i, row in enumerate(VOWELS_TABLE):
-    #     for j, char in enumerate(row[:-1]):
-    #         VOWELS_TO_IDS[char] = (i, j)
     VOWELS_TO_IDS = {
         'a': (0, 0), 'à': (0, 1), 'á': (0, 2), 'ả': (0, 3), 'ã': (0, 4), 'ạ': (0, 5), 
         'ă': (1, 0), 'ằ': (1, 1), 'ắ': (1, 2), 'ẳ': (1, 3), 'ẵ': (1, 4), 'ặ': (1, 5), 
@@ -117,7 +113,6 @@ class VietnameseToneNormalizer:
     
     @staticmethod
     def normalize_sentence_typing(text, vinai_normalization=False):
-        # https://github.com/VinAIResearch/BARTpho/blob/main/VietnameseToneNormalization.md
         if vinai_normalization: # Just simply replace the wrong tone with the correct one defined by VinAI
             for wrong, correct in VietnameseToneNormalizer.VINAI_NORMALIZED_TONE.items():
                 text = text.replace(wrong, correct)
@@ -190,12 +185,8 @@ class VietnameseTextPreprocessor:
         self._build_teencodes()
         
         self.max_correction_length = max_correction_length
-        self.corrector = pipeline(
-            'text2text-generation', model='bmd1905/vietnamese-correction-v2', 
-            torch_dtype='bfloat16', device_map='auto', num_workers=os.cpu_count()
-        )
-        print('bmd1905/vietnamese-correction-v2 is loaded successfully.')
-        
+        self.corrector = None
+       
     
     def _load_vncorenlp(self):
         self.word_segmenter = None
@@ -272,6 +263,8 @@ class VietnameseTextPreprocessor:
     
     def correct_vietnamese_errors(self, texts):
         # https://huggingface.co/bmd1905/vietnamese-correction-v2
+        if not self.corrector:
+            return texts
         predictions = self.corrector(texts, max_length=self.max_correction_length, truncation=True)
         return [prediction['generated_text'] for prediction in predictions]
         

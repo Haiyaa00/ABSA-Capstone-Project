@@ -3,23 +3,9 @@
   "citation": "",
   "config_name": "default",
   "dataset_name": "csv",
-  "dataset_size": 3057622,
+  "dataset_size": 3101213,
   "description": "",
-  "download_checksums": {
-    "/content/absa-vlsp-2018/experiments/../datasets/vlsp2018_hotel/1-VLSP2018-SA-Hotel-train.csv": {
-      "num_bytes": 1242027,
-      "checksum": null
-    },
-    "/content/absa-vlsp-2018/experiments/../datasets/vlsp2018_hotel/2-VLSP2018-SA-Hotel-dev.csv": {
-      "num_bytes": 489632,
-      "checksum": null
-    },
-    "/content/absa-vlsp-2018/experiments/../datasets/vlsp2018_hotel/3-VLSP2018-SA-Hotel-test.csv": {
-      "num_bytes": 177845,
-      "checksum": null
-    }
-  },
-  "download_size": 1909504,
+  "download_size": 1936388,
   "features": {
     "FACILITIES#CLEANLINESS": {
       "dtype": "int64",
@@ -162,31 +148,31 @@
         "dtype": "int32",
         "_type": "Value"
       },
-      "_type": "Sequence"
+      "_type": "List"
     },
     "token_type_ids": {
       "feature": {
         "dtype": "int8",
         "_type": "Value"
       },
-      "_type": "Sequence"
+      "_type": "List"
     },
     "attention_mask": {
       "feature": {
         "dtype": "int8",
         "_type": "Value"
       },
-      "_type": "Sequence"
+      "_type": "List"
     }
   },
   "homepage": "",
   "license": "",
-  "size_in_bytes": 4967126,
+  "size_in_bytes": 5037601,
   "splits": {
     "train": {
       "name": "train",
-      "num_bytes": 1857098,
-      "num_examples": 3000,
+      "num_bytes": 1900689,
+      "num_examples": 3109,
       "dataset_name": "csv"
     },
     "val": {
