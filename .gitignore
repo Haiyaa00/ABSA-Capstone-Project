@@ -1,5 +1,7 @@
 *.h5
 *.zip
+*.db
+.env
 __pycache__
 .ipynb_checkpoints
 ignore

@@ -14,6 +14,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 from transformers import AutoTokenizer
+from processors.reply_generator import AIReplyGenerator
 
 from acsa_model import VLSP2018MultiTask
 from processors.vietnamese_processor import VietnameseTextPreprocessor
@@ -72,6 +73,8 @@ class ACSAPipeline:
         # Khởi tạo Intent Detector
         self.intent_detector = HybridIntentDetector()
 
+        self.reply_generator = AIReplyGenerator()
+
     def analyze_review(self, review_text: str, rating: int = None) -> dict:
         # 1. Tiền xử lý văn bản
         cleaned_text = self.preprocessor.process_batch([review_text], correct_errors=False)
@@ -126,3 +129,15 @@ class ACSAPipeline:
             "intent_reason": intent_info["reason"],
             "task_action": intent_info["task_action"]
         }
+
+    def generate_reply_for_review(self, analysis_result: dict, hotel_name: str = None) -> dict:
+        """
+        Nhận kết quả từ analyze_review() và gọi AI sinh phản hồi phù hợp.
+        """
+        return self.reply_generator.generate_reply(
+            review_text=analysis_result["text"],
+            rating=analysis_result["rating"],
+            absa_results=analysis_result["aspects"],
+            intent=analysis_result["intent"],
+            hotel_name=hotel_name
+        )
