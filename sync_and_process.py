@@ -4,44 +4,32 @@ Mo ta: Luong tich hop tu dong (ETL Pipeline):
        Thu thap Review -> Luu CSDL -> PhoBERT ABSA -> Intent -> Phan cong Task tu dong.
 """
 
-import os
-os.environ["USE_TORCH"] = "0"
-os.environ["USE_TF"] = "1"
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+from core.config import configure_tf_env, settings
+from core.logger import get_logger
+from core.time_utils import utc_now
 
-from datetime import datetime
+configure_tf_env()
+
 from database.connection import SessionLocal, init_db
-from database.models import Hotel, Review, AspectResult, Task, TaskType, TaskPriority, TaskStatus, Department
+from database.models import Hotel, Review
 from processors.apify_ingestion import ReviewIngestionService
 from acsa_pipeline import ACSAPipeline
+from api.services.review_processor import apply_analysis_to_review, determine_department
+
+logger = get_logger(__name__)
+
 
 class ReviewSyncEngine:
-    def __init__(self):
-        print("[PIPELINE] Khoi dong dong co dong bo va xu ly du lieu...")
+    def __init__(self, ai_pipeline=None):
+        logger.info("Khoi dong dong co dong bo va xu ly du lieu...")
         init_db()
         self.db = SessionLocal()
         self.ingestion_service = ReviewIngestionService()
-        self.ai_pipeline = ACSAPipeline()
+        self.ai_pipeline = ai_pipeline or ACSAPipeline()
 
-    def _determine_department(self, aspect_category: str) -> Department:
-        """
-        Quy tac phan cong phong ban tu dong dua tren khia canh ABSA:
-        - ROOM / ROOMS -> Housekeeping hoac Maintenance
-        - SERVICE -> Front Desk
-        - FOOD&DRINKS -> F_AND_B
-        - FACILITIES -> Maintenance
-        """
-        asp = aspect_category.upper()
-        if "CLEANLINESS" in asp or "ROOMS#CLEANLINESS" in asp:
-            return Department.HOUSEKEEPING
-        elif "FOOD&DRINKS" in asp:
-            return Department.F_AND_B
-        elif "SERVICE" in asp:
-            return Department.FRONT_DESK
-        elif "FACILITIES" in asp or "COMFORT" in asp:
-            return Department.MAINTENANCE
-        return Department.MANAGEMENT
+    def _determine_department(self, aspect_category: str):
+        """Giu tuong thich nguoc, uy quyen cho module review_processor dung chung."""
+        return determine_department(aspect_category)
 
     def sync_hotel_reviews(self, hotel_name: str, maps_url: str = None, address: str = None, max_reviews: int = 10):
         # 1. Kiem tra hoac tao khach san trong CSDL
@@ -82,7 +70,7 @@ class ReviewSyncEngine:
                 author_name=r_item.get("author_name", "Khach hang"),
                 rating=r_item["rating"],
                 text=r_item["text"],
-                review_time=r_item.get("review_time", datetime.utcnow()),
+                review_time=r_item.get("review_time", utc_now()),
                 source=r_item.get("source", "GOOGLE_MAPS"),
                 is_processed=False
             )
@@ -90,7 +78,7 @@ class ReviewSyncEngine:
             inserted_count += 1
 
         self.db.commit()
-        print(f"[DATABASE] Da ghi nhan {inserted_count} danh gia moi vao co so du lieu.")
+        logger.info("Da ghi nhan %d danh gia moi vao co so du lieu.", inserted_count)
 
         # 3. Chay Mo hinh AI tren cac review chua xu ly
         unprocessed = self.db.query(Review).filter(
@@ -98,53 +86,20 @@ class ReviewSyncEngine:
             Review.is_processed == False
         ).all()
 
-        print(f"[AI ENGINE] Bat dau phan tich ABSA & Intent cho {len(unprocessed)} danh gia...")
+        logger.info("Bat dau phan tich ABSA & Intent cho %d danh gia...", len(unprocessed))
 
         for rev in unprocessed:
             analysis = self.ai_pipeline.analyze_review(rev.text, rev.rating)
-            
-            # Luu cac khia canh ABSA
-            for a in analysis["aspects"]:
-                aspect_record = AspectResult(
-                    review_id=rev.id,
-                    aspect_category=a["aspect"],
-                    sentiment=a["sentiment"],
-                    confidence=a["confidence"]
+            created_task = apply_analysis_to_review(self.db, rev, analysis)
+            if created_task is not None:
+                logger.info(
+                    "Sinh cong viec moi: %s -> Phong ban: %s",
+                    created_task.title,
+                    created_task.department.value,
                 )
-                self.db.add(aspect_record)
-
-            # Xu ly tao Task tu dong dua vao Intent
-            intent = analysis["intent"]
-            task_action = analysis["task_action"]
-
-            if task_action["create_task"]:
-                # Xac dinh phong ban xu ly dua tren khia canh tieu cuc dau tien
-                neg_aspects = [a["aspect"] for a in analysis["aspects"] if a["sentiment"] == "negative"]
-                target_dept = self._determine_department(neg_aspects[0]) if neg_aspects else Department.MANAGEMENT
-
-                task_type_enum = TaskType.CRITICAL_TASK if intent == "CRITICAL_COMPLAINT" else TaskType.IMPROVEMENT_TASK
-                priority_enum = TaskPriority.HIGH if intent == "CRITICAL_COMPLAINT" else TaskPriority.MEDIUM
-
-                task_title = f"[{'KHAN CAP' if intent == 'CRITICAL_COMPLAINT' else 'DE XUAT'}] {rev.author_name} ({rev.rating}*)"
-                task_desc = f"Noi dung: {rev.text}\nKhia canh phan anh: {', '.join(neg_aspects) if neg_aspects else 'Theo danh gia chung'}"
-
-                new_task = Task(
-                    hotel_id=hotel.id,
-                    review_id=rev.id,
-                    title=task_title,
-                    description=task_desc,
-                    task_type=task_type_enum,
-                    priority=priority_enum,
-                    status=TaskStatus.PENDING,
-                    department=target_dept
-                )
-                self.db.add(new_task)
-                print(f"[TASK CREATED] Sinh cong viec moi: {task_title} -> Phong ban: {target_dept.value}")
-
-            rev.is_processed = True
 
         self.db.commit()
-        print("[PIPELINE] Hoan tat quy trinh dong bo va phan tich du lieu.")
+        logger.info("Hoan tat quy trinh dong bo va phan tich du lieu.")
 
     def sync_hotel_chain(self, branches: list = None, max_reviews_per_branch: int = 15):
         """
@@ -152,8 +107,7 @@ class ReviewSyncEngine:
         Tu dong doc danh sach URL tu TARGET_GOOGLE_MAPS_URL trong .env neu khong truyen truc tiep.
         """
         if not branches:
-            env_urls_str = os.getenv("TARGET_GOOGLE_MAPS_URL", "")
-            env_urls = [u.strip() for u in env_urls_str.split(",") if u.strip().startswith("http")]
+            env_urls = [u.strip() for u in settings.TARGET_GOOGLE_MAPS_URL.split(",") if u.strip().startswith("http")]
 
             default_branches = [
                 {

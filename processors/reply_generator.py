@@ -7,24 +7,23 @@ Mô tả: Sinh câu phản hồi thông minh cho khách hàng dựa trên:
        - Kỹ thuật Grounding: Buộc LLM bám sát các khía cạnh cụ thể, chống ảo giác.
 """
 
-import os
-from dotenv import load_dotenv
+from core.config import settings
+from core.logger import get_logger
+from processors.gemini_helper import create_gemini_client, generate_text_with_fallback
 
-# Tải cấu hình từ .env
-load_dotenv()
+logger = get_logger(__name__)
 
 class AIReplyGenerator:
-    def __init__(self, api_key: str = None, model_name: str = "gemini-3.8-flash"):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
-        self.model_name = model_name
+    def __init__(self, api_key: str = None, model_name: str = None):
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self.model_name = model_name or settings.GEMINI_MODEL
         self.client = None
 
         if self.api_key:
             try:
-                from google import genai
-                self.client = genai.Client(api_key=self.api_key)
+                self.client = create_gemini_client(self.api_key)
             except Exception as e:
-                print(f"[Cảnh báo] Lỗi khởi tạo Gemini Client: {e}")
+                logger.warning("Loi khoi tao Gemini Client: %s", e)
 
     def generate_reply(
         self,
@@ -39,9 +38,9 @@ class AIReplyGenerator:
         """
         Sinh câu phản hồi phù hợp với ngữ cảnh khách sạn.
         """
-        hotel_name = hotel_name or os.getenv("DEFAULT_HOTEL_NAME", "Khách sạn chúng tôi")
-        manager_name = manager_name or os.getenv("HOTEL_MANAGER_NAME", "Ban Quản lý Khách sạn")
-        hotline = hotline or os.getenv("HOTEL_HOTLINE", "Hotline Chăm sóc Khách hàng")
+        hotel_name = hotel_name or settings.DEFAULT_HOTEL_NAME
+        manager_name = manager_name or settings.HOTEL_MANAGER_NAME
+        hotline = hotline or settings.HOTEL_HOTLINE
 
         # 1. Phân loại các khía cạnh khen / chê từ kết quả ABSA
         pos_aspects = [a['aspect'] for a in absa_results if a.get('sentiment') == 'positive']
@@ -101,21 +100,21 @@ Nhiệm vụ của bạn là soạn một phản hồi chính thức, chuyên ng
             }
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
+            reply_text, model_used = generate_text_with_fallback(
+                client=self.client,
+                primary_model=self.model_name,
+                prompt=prompt,
             )
-            reply_text = response.text.strip()
             return {
                 "success": True,
                 "reply": reply_text,
                 "source": "gemini_llm",
-                "model_used": self.model_name
+                "model_used": model_used,
             }
         except Exception as e:
             return {
                 "success": False,
                 "reply": f"Kính gửi Quý khách, {hotel_name} xin chân thành cảm ơn phản hồi của Quý khách. Chúng tôi luôn ghi nhận để hoàn thiện chất lượng phục vụ ngày một tốt hơn. Trân trọng, {manager_name}.",
                 "source": "fallback_error",
-                "error": str(e)
+                "error": str(e),
             }

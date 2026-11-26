@@ -5,12 +5,11 @@ Mô tả: Pipeline toàn diện xử lý câu review từ Google Maps:
 """
 
 import os
-os.environ["USE_TORCH"] = "0"
-os.environ["USE_TF"] = "1"
-os.environ['TF_USE_LEGACY_KERAS'] = '1'   
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0' 
+from core.config import configure_tf_env, settings
+from core.logger import get_logger
 
-import sys
+configure_tf_env()
+
 import numpy as np
 import tensorflow as tf
 from transformers import AutoTokenizer
@@ -20,6 +19,8 @@ from acsa_model import VLSP2018MultiTask
 from processors.vietnamese_processor import VietnameseTextPreprocessor
 from processors.vlsp2018_processor import PolarityMapping
 from processors.intent_detector import HybridIntentDetector
+
+logger = get_logger(__name__)
 
 # BẢNG 34 NGƯỠNG ĐỘNG TỐI ƯU ĐÃ ĐẠT KỶ LỤC F1 = 77.24%
 OPTIMAL_THRESHOLDS = {
@@ -43,12 +44,12 @@ OPTIMAL_THRESHOLDS = {
 }
 
 class ACSAPipeline:
-    def __init__(self, weights_path=None, pretrained_model='vinai/phobert-base', max_length=256):
-        print("⏳ Đang khởi tạo bộ tiền xử lý và nạp mô hình PhoBERT...")
+    def __init__(self, weights_path=None, pretrained_model='vinai/phobert-base', max_length=256, vncorenlp_dir=None):
+        logger.info("Dang khoi tao bo tien xu ly va nap mo hinh PhoBERT...")
         self.max_length = max_length
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
         self.preprocessor = VietnameseTextPreprocessor(
-            vncorenlp_dir='D:/VnCoreNLP',
+            vncorenlp_dir=vncorenlp_dir or settings.VNCORENLP_DIR,
             max_correction_length=max_length
         )
 
@@ -68,7 +69,7 @@ class ACSAPipeline:
             weights_path = os.path.join(base_dir, 'experiments', 'weights', 'Hotel-v2-phobert-normalized', 'Hotel-v2-phobert-normalized')
         
         self.model.load_weights(weights_path).expect_partial()
-        print("✅ Đã nạp thành công Checkpoint trọng số PhoBERT!")
+        logger.info("Da nap thanh cong Checkpoint trong so PhoBERT.")
 
         # Khởi tạo Intent Detector
         self.intent_detector = HybridIntentDetector()

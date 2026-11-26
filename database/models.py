@@ -10,9 +10,9 @@ Mo ta: Dinh nghia cac thuc the du lieu (ORM Models) theo chuan quan he:
 """
 
 import enum
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
+from core.time_utils import utc_now
 from .connection import Base
 
 class UserRole(str, enum.Enum):
@@ -59,7 +59,7 @@ class Hotel(Base):
     address = Column(String(500), nullable=True)
     google_place_id = Column(String(100), nullable=True, index=True)
     google_maps_url = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Quan he
     users = relationship("User", back_populates="hotel", cascade="all, delete-orphan")
@@ -77,7 +77,7 @@ class User(Base):
     full_name = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.MANAGER, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Quan he
     hotel = relationship("Hotel", back_populates="users")
@@ -94,8 +94,11 @@ class Review(Base):
     rating = Column(Integer, nullable=False) # So sao: 1 - 5
     text = Column(Text, nullable=False)
     review_time = Column(DateTime, nullable=True)
-    crawled_at = Column(DateTime, default=datetime.utcnow)
+    crawled_at = Column(DateTime, default=utc_now)
     is_processed = Column(Boolean, default=False, index=True) # Danh dau da chay qua mo hinh AI
+    intent = Column(String(50), default="GENERAL_FEEDBACK", nullable=True, index=True)
+    intent_reason = Column(Text, nullable=True)
+    is_replied = Column(Boolean, default=False, index=True) # Danh dau quan ly da phan hoi khach hang
 
     # Quan he
     hotel = relationship("Hotel", back_populates="reviews")
@@ -112,7 +115,7 @@ class AspectResult(Base):
     aspect_category = Column(String(100), nullable=False, index=True) # VD: ROOMS#CLEANLINESS
     sentiment = Column(String(20), nullable=False)                    # positive, negative, neutral
     confidence = Column(Float, nullable=False)                       # Xac suat du doan
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Quan he
     review = relationship("Review", back_populates="aspect_results")
@@ -130,8 +133,9 @@ class Task(Base):
     priority = Column(Enum(TaskPriority), default=TaskPriority.MEDIUM, nullable=False)
     status = Column(Enum(TaskStatus), default=TaskStatus.PENDING, nullable=False, index=True)
     department = Column(Enum(Department), default=Department.MANAGEMENT, nullable=False)
+    resolution_note = Column(Text, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Quan he
     hotel = relationship("Hotel", back_populates="tasks")
@@ -146,7 +150,8 @@ class ReplyLog(Base):
     generated_reply = Column(Text, nullable=False)
     source = Column(String(50), default="gemini_llm") # gemini_llm hoac fallback
     is_used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, nullable=True)
 
     # Quan he
     review = relationship("Review", back_populates="reply_logs")

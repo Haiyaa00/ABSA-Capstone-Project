@@ -4,16 +4,17 @@ Mo ta: Thu thap du lieu danh gia tu Google Maps thong qua Apify Actor API.
        Ho tro co che Dual-Mode (Truy van Live hoac Che do Tap Mau chuan hoa).
 """
 
-import os
 import re
 from datetime import datetime
-from dotenv import load_dotenv
+from core.config import settings
+from core.logger import get_logger
+from core.time_utils import utc_now
 
-load_dotenv()
+logger = get_logger(__name__)
 
 class ReviewIngestionService:
     def __init__(self, api_token: str = None):
-        self.api_token = api_token or os.getenv("APIFY_API_TOKEN", "")
+        self.api_token = api_token or settings.APIFY_API_TOKEN
         self.client = None
 
         if self.api_token:
@@ -21,7 +22,7 @@ class ReviewIngestionService:
                 from apify_client import ApifyClient
                 self.client = ApifyClient(self.api_token)
             except Exception as e:
-                print(f"[WARNING] Khong the khoi tao Apify Client: {e}")
+                logger.warning("Khong the khoi tao Apify Client: %s", e)
 
     def fetch_reviews(self, maps_url: str, max_reviews: int = 20) -> list:
         """
@@ -32,12 +33,12 @@ class ReviewIngestionService:
         if self.client and maps_url and "sample" not in maps_url:
             return self._fetch_from_apify(maps_url, max_reviews)
         else:
-            print("[INFO] Su dung bo du lieu chuan hoa noi bo (Simulation Mode).")
+            logger.info("Su dung bo du lieu chuan hoa noi bo (Simulation Mode).")
             return self._get_mock_reviews(max_reviews)
 
     def _fetch_from_apify(self, maps_url: str, max_reviews: int) -> list:
         try:
-            print(f"[INFO] Bat dau truy van Apify Google Maps Reviews Scraper: {maps_url}")
+            logger.info("Bat dau truy van Apify Google Maps Reviews Scraper: %s", maps_url)
             run_input = {
                 "startUrls": [{"url": maps_url}],
                 "maxReviews": max_reviews,
@@ -61,7 +62,7 @@ class ReviewIngestionService:
                     continue
                 
                 published_str = item.get("publishedAtDate")
-                review_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00")) if published_str else datetime.utcnow()
+                review_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00")) if published_str else utc_now()
                 if review_dt.tzinfo:
                     review_dt = review_dt.replace(tzinfo=None)
 
@@ -73,10 +74,10 @@ class ReviewIngestionService:
                     "review_time": review_dt,
                     "source": "GOOGLE_MAPS"
                 })
-            print(f"[SUCCESS] Da thu thap {len(standardized_reviews)} danh gia tu Apify.")
+            logger.info("Da thu thap %d danh gia tu Apify.", len(standardized_reviews))
             return standardized_reviews
         except Exception as e:
-            print(f"[ERROR] Loi khi thu thap du lieu tu Apify: {e}. Chuyen sang du lieu mau.")
+            logger.error("Loi khi thu thap du lieu tu Apify: %s. Chuyen sang du lieu mau.", e)
             return self._get_mock_reviews(max_reviews)
 
     def _get_mock_reviews(self, limit: int = 20) -> list:

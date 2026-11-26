@@ -7,22 +7,25 @@ Các nhãn đầu ra:
   3. GENERAL_FEEDBACK      (Đánh giá thông thường / Khen ngợi -> Không tạo Task)
 """
 
-import os
 import re
 import json
+from core.config import settings
+from core.logger import get_logger
+from processors.gemini_helper import create_gemini_client, generate_text_with_fallback
+
+logger = get_logger(__name__)
 
 class HybridIntentDetector:
     def __init__(self, gemini_api_key: str = None):
-        self.api_key = gemini_api_key or os.getenv("GEMINI_API_KEY", "")
+        self.api_key = gemini_api_key or settings.GEMINI_API_KEY
         self.gemini_client = None
 
         # Khởi tạo client Gemini nếu có API key
         if self.api_key:
             try:
-                from google import genai
-                self.gemini_client = genai.Client(api_key=self.api_key)
+                self.gemini_client = create_gemini_client(self.api_key)
             except Exception as e:
-                print(f"[Cảnh báo] Không thể kết nối Gemini API: {e}. Hệ thống sẽ sử dụng Rule-based thuần túy.")
+                logger.warning("Khong the ket noi Gemini API: %s. Su dung Rule-based thuan tuy.", e)
 
         # 1. Từ điển từ khóa báo động đỏ (CRITICAL KEYWORDS)
         self.critical_keywords = [
@@ -126,12 +129,12 @@ Hãy trả về DUY NHẤT một chuỗi JSON chuẩn có cấu trúc như sau:
 {{"intent": "TÊN_NHÃN", "confidence": 0.95, "reason": "Giải thích ngắn gọn 1 câu"}}
 """
         try:
-            response = self.gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
+            resp_text, _ = generate_text_with_fallback(
+                client=self.gemini_client,
+                primary_model=settings.GEMINI_MODEL,
+                prompt=prompt,
             )
             # Làm sạch JSON
-            resp_text = response.text.strip()
             resp_text = re.sub(r'```json\s*', '', resp_text)
             resp_text = re.sub(r'```', '', resp_text).strip()
             result = json.loads(resp_text)
